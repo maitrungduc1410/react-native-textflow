@@ -17,7 +17,7 @@
 
 | Android | iOS |
 | --- | --- |
-| placeholder | placeholder |
+| <video src="https://github.com/user-attachments/assets/e880e96e-1c53-4d9b-8f26-fe85118b3938" controls loop muted></video> | <video src="https://github.com/user-attachments/assets/650e1eb7-f772-4ccf-a95f-2f923dd30fe7" controls loop muted></video> |
 
 ## Why this exists
 
