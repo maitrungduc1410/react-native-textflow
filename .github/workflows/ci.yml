@@ -386,9 +386,12 @@ jobs:
           api-level: 34
           arch: x86_64
           profile: pixel_6
-          script: |
-            cd example/android
-            ./gradlew :react-native-textflow:connectedDebugAndroidTest --no-daemon
+          # `reactivecircus/android-emulator-runner@v2` invokes each line
+          # of `script:` as its own `sh -c "<line>"` — `cd` on one line
+          # does NOT carry into the next, so the gradlew call would run
+          # from the repo root and fail with "./gradlew: not found".
+          # Chain with `&&` so both commands share a single shell.
+          script: cd example/android && ./gradlew :react-native-textflow:connectedDebugAndroidTest --no-daemon
 
       - name: Upload androidTest report
         if: always()
@@ -456,12 +459,27 @@ jobs:
           curl -fsSL "https://get.maestro.mobile.dev" | bash
           echo "$HOME/.maestro/bin" >> $GITHUB_PATH
 
-      - name: Build example debug APK
+      - name: Build example release APK
         if: steps.paths.outputs.relevant == 'true'
         working-directory: example/android
         env:
           JAVA_OPTS: "-XX:MaxHeapSize=6g"
-        run: ./gradlew :app:assembleDebug --no-daemon
+        # We build :app:assembleRelease (not :app:assembleDebug) so the
+        # React Native gradle plugin's `bundleReleaseJsAndAssets` task
+        # runs and bakes the JS bundle + assets into the APK. The
+        # plugin's default `debuggableVariants = ["debug",
+        # "debugOptimized"]` skips bundling for Debug, so a
+        # Debug-built APK launched on a CI emulator (no Metro) would
+        # boot into the RN red error screen and fail every Maestro
+        # flow (the iOS counterpart has the same problem; see
+        # `FORCE_BUNDLING=1` in the maestro-ios job).
+        #
+        # Release here is cheap: `signingConfigs.release` already
+        # reuses the debug keystore, and `minifyEnabled = false`
+        # keeps ProGuard out of the picture. The `applicationId` is
+        # identical for both build types so the Maestro `appId:`
+        # selectors don't change.
+        run: ./gradlew :app:assembleRelease --no-daemon
 
       - name: Run Maestro on emulator
         if: steps.paths.outputs.relevant == 'true'
@@ -475,11 +493,13 @@ jobs:
           # `takeScreenshot:` PNGs and `--output maestro-junit.xml` all
           # land in one tidy directory that the next step uploads as a
           # single artifact.
-          script: |
-            adb install -r example/android/app/build/outputs/apk/debug/app-debug.apk
-            mkdir -p .maestro-output
-            cd .maestro-output
-            maestro test ../.maestro --include-tags=android --format=junit --output maestro-junit.xml
+          #
+          # NB: `reactivecircus/android-emulator-runner@v2` invokes each
+          # line of `script:` as its own `sh -c "<line>"` — state from
+          # `cd` / `mkdir` does NOT carry into the next line. Chain with
+          # `&&` so the whole sequence shares a single shell. (Same
+          # reason `test-android-instrumented` chains its gradlew call.)
+          script: adb install -r example/android/app/build/outputs/apk/release/app-release.apk && mkdir -p .maestro-output && cd .maestro-output && maestro test ../.maestro --include-tags=android --format=junit --output maestro-junit.xml
 
       - name: Upload Maestro artifacts
         if: always()
@@ -565,6 +585,19 @@ jobs:
       - name: Build & install example app on Simulator
         if: steps.paths.outputs.relevant == 'true'
         working-directory: example/ios
+        env:
+          # `react-native-xcode.sh` (the "Bundle React Native code and
+          # images" build phase) skips JS bundling for Debug+Simulator
+          # builds because, locally, Metro is running and serves the
+          # bundle live. CI has no Metro process — without
+          # `FORCE_BUNDLING=1` the launched .app would boot into the
+          # RN red error screen ("Could not connect to development
+          # server") and every Maestro `assertVisible` / id lookup
+          # would fail. We keep Configuration=Debug so test IDs and
+          # accessibility labels behave identically to the local
+          # `yarn maestro:ios` workflow; the env var only affects the
+          # bundle phase, nothing else about the build.
+          FORCE_BUNDLING: 1
         run: |
           xcodebuild build \
             -workspace AdaptiveTextExample.xcworkspace \
