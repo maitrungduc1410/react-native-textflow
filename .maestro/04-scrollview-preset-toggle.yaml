@@ -14,6 +14,11 @@ tags:
 ---
 - launchApp:
     clearState: true
+# Wait for HomeScreen JS to mount before any interaction. `clearState`
+# forces a cold start which on the CI emulator takes 8–15 s; without
+# this gate the next step would race the React Native bootstrap. See
+# 01-resizable.yaml for the canonical comment.
+- assertVisible: "Adaptive Text"
 # Home row by testID — see 00-launch.yaml for rationale.
 #
 # `ScrollView` is row 4/11 on Home. It's visible on most local Android

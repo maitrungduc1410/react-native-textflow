@@ -12,6 +12,20 @@ tags:
 ---
 - launchApp:
     clearState: true
+# `clearState: true` translates to `pm clear` + `am start`, which forces
+# a cold start of the next launch (Hermes re-parses the bundle, RN
+# runtime re-inits, JS mounts, navigation boots). On the CI Pixel-6
+# AVD with swiftshader_indirect + 2 cores that takes 8–15 s; locally
+# with hardware acceleration it's 1–2 s.
+#
+# `assertVisible` retries on a longer/more permissive polling loop
+# than `tapOn` does, so we use it as an explicit "wait until the JS
+# UI has rendered" gate before any interaction. Without this gate
+# `tapOn` burns its retry budget against the still-blank Activity
+# (the failure screenshot is fully white). The "Adaptive Text"
+# headline is the cheapest, locale-stable witness that HomeScreen
+# has mounted; same pattern as 00-launch.yaml.
+- assertVisible: "Adaptive Text"
 # Tap the home row by testID (set in HomeScreen.tsx) — see comment in
 # 00-launch.yaml for why text matching against the row title fails on
 # iOS due to auto-combined accessibility labels.

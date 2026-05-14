@@ -12,6 +12,11 @@ tags:
 ---
 - launchApp:
     clearState: true
+# Wait for HomeScreen JS to mount before any interaction. `clearState`
+# forces a cold start which on the CI emulator takes 8–15 s; without
+# this gate the next step would race the React Native bootstrap. See
+# 01-resizable.yaml for the canonical comment.
+- assertVisible: "Adaptive Text"
 # Theme is row 11/11 on Home and is below the fold on most emulators.
 # Maestro's `tapOn` auto-scrolls RecyclerView/ListView but is unreliable
 # inside RN's <ScrollView>, so we drive the scroll explicitly first.
