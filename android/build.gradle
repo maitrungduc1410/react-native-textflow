@@ -43,6 +43,7 @@ android {
   defaultConfig {
     minSdkVersion getExtOrDefault("minSdkVersion")
     targetSdkVersion getExtOrDefault("targetSdkVersion")
+    testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
   }
 
   buildFeatures {
@@ -68,6 +69,31 @@ android {
   kotlinOptions {
     jvmTarget = "17"
   }
+
+  // JVM unit tests (`./gradlew :react-native-textflow:test`) need to read
+  // the cross-platform tokenizer fixtures at __fixtures__/tokenizer.json
+  // (project-relative). Wiring them as a test resource directory keeps
+  // the source-of-truth in one place and makes it accessible via the
+  // classpath on the test JVM.
+  //
+  // We use `file('../__fixtures__')` (not `rootProject.file(...)`)
+  // because the library is autolinked as a subproject inside the
+  // example app's Gradle build, where `rootProject` would point at
+  // `example/android/` and `rootProject.file('../__fixtures__')`
+  // would resolve to `example/__fixtures__/` (which doesn't exist).
+  // `file(...)` resolves relative to *this* project's projectDir
+  // (`android/`), so `../__fixtures__` is always the workspace-root
+  // fixtures directory regardless of which gradle build hosts us.
+  sourceSets {
+    test {
+      resources.srcDirs += file('../__fixtures__')
+    }
+  }
+
+  testOptions {
+    unitTests.includeAndroidResources = true
+    unitTests.returnDefaultValues = true
+  }
 }
 
 dependencies {
@@ -89,4 +115,32 @@ dependencies {
   implementation "androidx.lifecycle:lifecycle-runtime-ktx:2.8.7"
   implementation "androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7"
   implementation "androidx.savedstate:savedstate-ktx:1.2.1"
+
+  // Local unit tests (no emulator). These cover:
+  //   * AdaptiveTextTokenizer parity with iOS via the shared JSON fixtures
+  //     (AGENTS.md §4.4).
+  //   * AdaptiveTextNativeMeasurer.fontCacheKey sensitivity — every prop
+  //     that affects glyph advance MUST contribute to the cache key
+  //     (AGENTS.md §8.A and the long-form note in the measurer file).
+  //
+  // We deliberately skip Robolectric for now: the public tokenizer is
+  // pure JVM (java.text.BreakIterator), and the cache-key test only
+  // touches a pure string-builder method — neither needs an Android
+  // runtime. This keeps the unit-test JVM startup fast in CI.
+  testImplementation "junit:junit:4.13.2"
+  testImplementation "org.jetbrains.kotlin:kotlin-test-junit:${getExtOrDefault('kotlinVersion')}"
+  testImplementation "com.google.truth:truth:1.4.4"
+  testImplementation "org.json:json:20240303"
+
+  // Compose UI instrumented test — runs on a real emulator. Pins the
+  // §4.2 invariant (composeView height tracks Yoga across prop changes).
+  androidTestImplementation "androidx.test:core:1.6.1"
+  androidTestImplementation "androidx.test:runner:1.6.2"
+  androidTestImplementation "androidx.test:rules:1.6.1"
+  androidTestImplementation "androidx.test.ext:junit:1.2.1"
+  androidTestImplementation "junit:junit:4.13.2"
+  androidTestImplementation "com.google.truth:truth:1.4.4"
+  androidTestImplementation composeBom
+  androidTestImplementation "androidx.compose.ui:ui-test-junit4"
+  debugImplementation "androidx.compose.ui:ui-test-manifest"
 }

@@ -71,6 +71,7 @@ export default function StyleMorph() {
 
         <View style={styles.controls}>
           <Slider
+            testID="FontSizeSlider"
             label="Font size"
             unit="px"
             value={fontSize}

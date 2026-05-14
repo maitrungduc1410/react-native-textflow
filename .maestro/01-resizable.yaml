@@ -1,0 +1,46 @@
+# AGENTS.md §9.2: "Drag the handle slowly across its full range —
+# tokens should never visibly clip or jump; the bottom line should
+# always be fully visible."
+#
+# This flow exercises a continuous resize via the handle on screen 1,
+# stopping at three intermediate widths to capture screenshots that
+# can be visually diffed in CI.
+appId: adaptivetext.example
+tags:
+  - android
+  - ios
+---
+- launchApp:
+    clearState: true
+# Tap the home row by testID (set in HomeScreen.tsx) — see comment in
+# 00-launch.yaml for why text matching against the row title fails on
+# iOS due to auto-combined accessibility labels.
+- tapOn:
+    id: "ResizableContainer"
+# Match the handle by testID. Plain Views need both `accessible` and a
+# queryable identifier to surface in iOS's XCTest accessibility tree;
+# see the comment on the handle View in 01-ResizableContainer.tsx.
+- assertVisible:
+    id: "ResizeHandle"
+- takeScreenshot: 01-resizable-initial
+
+# Drag handle to the left (narrows the frame; should wrap more lines).
+# We use a reasonable absolute distance to stay device-independent.
+- swipe:
+    from:
+      id: "ResizeHandle"
+    direction: LEFT
+- takeScreenshot: 01-resizable-narrow
+
+- swipe:
+    from:
+      id: "ResizeHandle"
+    direction: RIGHT
+- takeScreenshot: 01-resizable-wide
+
+# Final state — should match initial-ish.
+- swipe:
+    from:
+      id: "ResizeHandle"
+    direction: LEFT
+- takeScreenshot: 01-resizable-final

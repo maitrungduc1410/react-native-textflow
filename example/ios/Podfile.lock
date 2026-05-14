@@ -1863,7 +1863,7 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
-  - TextFlow (0.1.0):
+  - TextFlow (1.0.0):
     - hermes-engine
     - RCTRequired
     - RCTTypeSafety
@@ -1884,9 +1884,9 @@ PODS:
     - ReactCommon/turbomodule/bridging
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
-    - TextFlow/common (= 0.1.0)
+    - TextFlow/common (= 1.0.0)
     - Yoga
-  - TextFlow/common (0.1.0):
+  - TextFlow/common (1.0.0):
     - hermes-engine
     - RCTRequired
     - RCTTypeSafety
@@ -2219,9 +2219,9 @@ SPEC CHECKSUMS:
   ReactCommon: fe2a3af8975e63efa60f95fca8c34dc85deee360
   ReactNativeDependencies: a29a5189f1623ed60054abea93f3b0d5d66ceb43
   RNScreens: 01b065ded2dfe7987bcce770ff3a196be417ff41
-  TextFlow: 5820792e648e56b0a3559755033af5ed46c2a193
+  TextFlow: 2a3ef1e81b493ce67a96970812eed56a51b34e62
   Yoga: e83c3121d079541e69f3c5c623faaaf933fb5812
 
-PODFILE CHECKSUM: 271ebe6c365aa47ada3652417ce7c56cb56ea752
+PODFILE CHECKSUM: 4fe0465ab7c43d990af21843bf2fab79ae344527
 
-COCOAPODS: 1.16.2
+COCOAPODS: 1.15.2

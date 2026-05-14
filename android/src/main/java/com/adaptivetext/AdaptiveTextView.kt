@@ -3,6 +3,7 @@ package com.adaptivetext
 import android.content.Context
 import android.util.AttributeSet
 import android.widget.FrameLayout
+import androidx.annotation.VisibleForTesting
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -72,7 +73,16 @@ class AdaptiveTextView : FrameLayout {
   // Compose's tree currently thinks its own intrinsic size is. The
   // momentarily-stale Compose tree just renders smaller content inside a
   // correctly-sized View; recomposition then fills it. No clipping.
-  private val composeView: ComposeView = ComposeView(context).apply {
+  // Visibility relaxed from `private` so the instrumented test
+  // `AdaptiveTextViewHeightTest` (in `androidTest/`) can read
+  // `composeView.measuredHeight` directly to pin the §4.2 invariant
+  // (the outer Android measured size of the ComposeView must track
+  // whatever Yoga gives the AdaptiveTextView, which only holds when
+  // its LayoutParams are MATCH_PARENT × MATCH_PARENT). Test code
+  // lives in the same Gradle module so `internal` is the smallest
+  // visibility that works.
+  @get:VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
+  internal val composeView: ComposeView = ComposeView(context).apply {
     layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
     setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindowOrReleasedFromPool)
     setContent {

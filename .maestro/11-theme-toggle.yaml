@@ -1,0 +1,68 @@
+# AGENTS.md §9.6: "Light → Dark → Light → Dark → Light. Card chrome
+# animates each time; AdaptiveText snaps; nothing freezes."
+#
+# This flow protects the §4.3 trap (Animated style.color crashing
+# inside Fabric child-tracking) at the user-observable level: if the
+# theme toggle ever crashes the JS render path, the third tap won't
+# land and the assertion that follows it goes red.
+appId: adaptivetext.example
+tags:
+  - android
+  - ios
+---
+- launchApp:
+    clearState: true
+# Theme is row 11/11 on Home and is below the fold on most emulators.
+# Maestro's `tapOn` auto-scrolls RecyclerView/ListView but is unreliable
+# inside RN's <ScrollView>, so we drive the scroll explicitly first.
+#
+# Match the row by testID (set in HomeScreen.tsx) instead of text — see
+# 00-launch.yaml for why row title matching fails on iOS.
+- scrollUntilVisible:
+    element:
+      id: "Theme"
+    direction: DOWN
+    timeout: 20000
+- tapOn:
+    id: "Theme"
+- assertVisible:
+    text: "system"
+- takeScreenshot: 11-theme-initial
+
+- tapOn:
+    text: "light"
+- takeScreenshot: 11-theme-light-1
+
+- tapOn:
+    text: "dark"
+- takeScreenshot: 11-theme-dark-1
+
+- tapOn:
+    text: "light"
+- takeScreenshot: 11-theme-light-2
+
+- tapOn:
+    text: "dark"
+- takeScreenshot: 11-theme-dark-2
+
+# Fifth tap — pinpoints the "stuck after 3 toggles" regression. If the
+# JS render path crashed during any of the prior toggles, the screen
+# would be gone and this assertion would fail.
+#
+# We assert against the hint <Text> at the bottom of screen 11 (a plain
+# RN Text), NOT the AdaptiveText headline. AdaptiveText renders one
+# native view per token (SwiftUI Text / Compose Text), so no single
+# element on the accessibility tree contains the full sentence — the
+# host view's combined accessibilityLabel is unreliable inside the
+# SwiftUI/Compose hosting controllers. Asserting against a plain RN
+# <Text> avoids that whole class of brittleness while still proving
+# the screen survived the toggle sequence.
+#
+# Use the *full* element text. Maestro's `text:` matcher is a regex
+# with full-match semantics (`Pattern.matches()`-style), not substring
+# `.find()` — so "color is a non-layout prop" alone would fail to
+# match the longer hint sentence even though the element is visible.
+- tapOn:
+    text: "light"
+- takeScreenshot: 11-theme-light-3
+- assertVisible: "color is a non-layout prop — tokens stay put while the card glides."

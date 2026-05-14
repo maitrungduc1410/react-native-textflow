@@ -84,3 +84,9 @@ android/generated
 
 # React Native Nitro Modules
 nitrogen/
+
+# Maestro
+# E2E flow artifacts: takeScreenshot PNGs and the JUnit report. Ignored
+# locally; uploaded as a CI artifact by the maestro-android / maestro-ios
+# jobs in .github/workflows/ci.yml.
+.maestro-output/

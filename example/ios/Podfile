@@ -26,6 +26,21 @@ target 'AdaptiveTextExample' do
     :app_path => "#{Pod::Config.instance.installation_root}/.."
   )
 
+  # XCTest unit-test bundle for the library. The target itself is
+  # created by `scripts/add_test_target.rb` (idempotent — see comment
+  # at the top of that file). We declare it here so CocoaPods links
+  # the same pods the host app links into the test bundle, which is
+  # what `BUNDLE_LOADER`/`TEST_HOST` expect at runtime when XCTest
+  # injects the bundle into a launched copy of `AdaptiveTextExample`.
+  #
+  # We rely on `inherit! :search_paths` rather than re-linking every
+  # transitive pod — the test bundle does not produce its own binary
+  # copy of e.g. React, it just needs the headers at compile time;
+  # the actual symbols are resolved at runtime through the host app.
+  target 'AdaptiveTextExampleTests' do
+    inherit! :search_paths
+  end
+
   post_install do |installer|
     react_native_post_install(
       installer,

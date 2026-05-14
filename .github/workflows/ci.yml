@@ -2,10 +2,10 @@ name: CI
 on:
   push:
     branches:
-      - main
+      - master
   pull_request:
     branches:
-      - main
+      - master
   merge_group:
     types:
       - checks_requested
@@ -17,10 +17,11 @@ concurrency:
 jobs:
   lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - name: Checkout
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        uses: actions/checkout@v6
 
       - name: Setup
         uses: ./.github/actions/setup
@@ -34,10 +35,11 @@ jobs:
 
   build-library:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Checkout
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        uses: actions/checkout@v6
 
       - name: Setup
         uses: ./.github/actions/setup
@@ -45,21 +47,190 @@ jobs:
       - name: Build package
         run: yarn prepare
 
+  # Layer 1 — JS unit tests with Jest at the library root.
+  # Cheap (sub-second runtime). Runs on every commit.
+  test-js:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup
+        uses: ./.github/actions/setup
+
+      - name: Run Jest
+        run: yarn test --ci --coverage
+
+      - name: Upload coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-js
+          path: coverage/
+          retention-days: 7
+
+  # Layer 3 — Android JVM unit tests. Pure JUnit; no emulator. Runs in
+  # the Gradle build hosted by the example app (the library is auto-
+  # linked there).
+  #
+  # Skips on iOS-only changes via `paths-filter`. The job still spins
+  # up the runner briefly to evaluate the filter, but every meaningful
+  # step is gated, so an `ios/**`-only diff costs ~5s of cheap Linux
+  # minutes instead of a full ~25 min Gradle invocation.
+  test-android-unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Detect Android-relevant paths changed
+        id: paths
+        uses: dorny/paths-filter@v4
+        with:
+          filters: |
+            android:
+              - 'android/**'
+              - 'src/**'
+              - 'common/**'
+              - '__fixtures__/**'
+
+      - name: Setup
+        if: steps.paths.outputs.android == 'true'
+        uses: ./.github/actions/setup
+
+      - name: Install JDK
+        if: steps.paths.outputs.android == 'true'
+        uses: actions/setup-java@v5
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Cache Gradle
+        if: steps.paths.outputs.android == 'true'
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.gradle/wrapper
+            ~/.gradle/caches
+          key: ${{ runner.os }}-gradle-${{ hashFiles('example/android/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Run library JVM unit tests
+        if: steps.paths.outputs.android == 'true'
+        working-directory: example/android
+        run: ./gradlew :react-native-textflow:testDebugUnitTest --no-daemon
+
+      - name: Upload test report
+        if: always() && steps.paths.outputs.android == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: android-unit-test-report
+          path: android/build/reports/tests/
+          retention-days: 7
+
+  # Layer 5 — iOS XCTest. Runs against a Simulator on the same macOS
+  # runner shape we already use for `build-ios`. Cheap relative to a
+  # full app build because the test bundle is small and inherits the
+  # app's pod search paths via `inherit! :search_paths`.
+  #
+  # Skips on Android-only changes via `paths-filter`. macOS minutes
+  # are 10× the cost of Linux minutes on GitHub-hosted runners, so the
+  # filter savings here are ~10× more valuable than on the Android
+  # cheap-lane job above.
+  test-ios:
+    runs-on: macos-latest
+    timeout-minutes: 45
+
+    env:
+      XCODE_VERSION: 26
+      # Keep simulator name in sync with `maestro-ios` and the local
+      # default in TEST_GUIDE.md. Bumping major versions is a one-line
+      # change here when a new Xcode ships.
+      IOS_SIMULATOR: 'iPhone 17'
+      RCT_USE_RN_DEP: 1
+      RCT_USE_PREBUILT_RNCORE: 1
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Detect iOS-relevant paths changed
+        id: paths
+        uses: dorny/paths-filter@v4
+        with:
+          filters: |
+            ios:
+              - 'ios/**'
+              - 'src/**'
+              - 'common/**'
+              - '__fixtures__/**'
+
+      - name: Setup
+        if: steps.paths.outputs.ios == 'true'
+        uses: ./.github/actions/setup
+
+      - name: Use appropriate Xcode version
+        if: steps.paths.outputs.ios == 'true'
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: ${{ env.XCODE_VERSION }}
+
+      - name: Inject XCTest target into the example project
+        if: steps.paths.outputs.ios == 'true'
+        working-directory: example/ios
+        run: ruby ./scripts/add_test_target.rb
+
+      - name: Install CocoaPods
+        if: steps.paths.outputs.ios == 'true'
+        working-directory: example
+        run: |
+          bundle install
+          bundle exec pod repo update --verbose
+          bundle exec pod install --project-directory=ios
+
+      - name: Run XCTest
+        if: steps.paths.outputs.ios == 'true'
+        working-directory: example/ios
+        # Use a fixed Simulator name so xcodebuild doesn't pick a flaky
+        # boot-on-demand device. macos-latest images include the
+        # current Xcode default Simulator runtime.
+        run: |
+          xcodebuild test \
+            -workspace AdaptiveTextExample.xcworkspace \
+            -scheme AdaptiveTextExampleTests \
+            -destination "platform=iOS Simulator,name=${IOS_SIMULATOR},OS=latest" \
+            -resultBundlePath ./test-results.xcresult \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Upload xcresult bundle
+        if: always() && steps.paths.outputs.ios == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-xctest-result
+          path: example/ios/test-results.xcresult
+          retention-days: 7
+
   build-android:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
 
     env:
       TURBO_CACHE_DIR: .turbo/android
 
     steps:
       - name: Checkout
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        uses: actions/checkout@v6
 
       - name: Setup
         uses: ./.github/actions/setup
 
       - name: Cache turborepo for Android
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        uses: actions/cache@v5
         with:
           path: ${{ env.TURBO_CACHE_DIR }}
           key: ${{ runner.os }}-turborepo-android-${{ hashFiles('yarn.lock') }}
@@ -76,7 +247,7 @@ jobs:
 
       - name: Install JDK
         if: env.turbo_cache_hit != 1
-        uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
+        uses: actions/setup-java@v5
         with:
           distribution: 'zulu'
           java-version: '17'
@@ -89,7 +260,7 @@ jobs:
 
       - name: Cache Gradle
         if: env.turbo_cache_hit != 1
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        uses: actions/cache@v5
         with:
           path: |
             ~/.gradle/wrapper
@@ -106,6 +277,7 @@ jobs:
 
   build-ios:
     runs-on: macos-latest
+    timeout-minutes: 60
 
     env:
       XCODE_VERSION: 26
@@ -115,13 +287,13 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        uses: actions/checkout@v6
 
       - name: Setup
         uses: ./.github/actions/setup
 
       - name: Cache turborepo for iOS
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        uses: actions/cache@v5
         with:
           path: ${{ env.TURBO_CACHE_DIR }}
           key: ${{ runner.os }}-turborepo-ios-${{ hashFiles('yarn.lock') }}
@@ -138,7 +310,7 @@ jobs:
 
       - name: Use appropriate Xcode version
         if: env.turbo_cache_hit != 1
-        uses: maxim-lobanov/setup-xcode@60606e260d2fc5762a71e64e74b2174e8ea3c8bd # v1.6.0
+        uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: ${{ env.XCODE_VERSION }}
 
@@ -154,3 +326,272 @@ jobs:
         run: |
           yarn turbo run build:ios --cache-dir="${{ env.TURBO_CACHE_DIR }}"
 
+  # ---------- HEAVY LANE — only on push to master + paths filter ----------
+  #
+  # Per agreement, the slow emulator/simulator-backed tests gate to
+  # `master` branch and only run when `android/`, `ios/`, `src/` or
+  # `common/` actually changed. PRs and merge groups skip them.
+  # `if:` filtering at the job level (rather than a separate workflow
+  # file) keeps a single status-checks UI in GitHub.
+
+  # Layer 4 — Android Compose UI test on emulator. The §4.2 smoking gun.
+  #
+  # Path filter is intentionally Android-only: `ios/**` does NOT trigger
+  # this job. iOS-only diffs cannot regress the ComposeView height bug
+  # this test guards against.
+  test-android-instrumented:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    if: |
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/master'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Detect Android-relevant paths changed
+        id: paths
+        uses: dorny/paths-filter@v4
+        with:
+          filters: |
+            relevant:
+              - 'android/**'
+              - 'src/**'
+              - 'common/**'
+              - '__fixtures__/**'
+
+      - name: Setup
+        if: steps.paths.outputs.relevant == 'true'
+        uses: ./.github/actions/setup
+
+      - name: Install JDK
+        if: steps.paths.outputs.relevant == 'true'
+        uses: actions/setup-java@v5
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Enable KVM (for hardware-accelerated emulator)
+        if: steps.paths.outputs.relevant == 'true'
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run Compose UI test on emulator
+        if: steps.paths.outputs.relevant == 'true'
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          profile: pixel_6
+          script: |
+            cd example/android
+            ./gradlew :react-native-textflow:connectedDebugAndroidTest --no-daemon
+
+      - name: Upload androidTest report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: android-instrumented-test-report
+          path: android/build/reports/androidTests/
+          retention-days: 14
+
+  # Layer 6a — Maestro on Android.
+  #
+  # Path filter excludes `ios/**` and `example/ios/**` — an iOS-only
+  # diff has no path through which it can regress the Android example
+  # app or its Maestro flow surface area.
+  maestro-android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    if: |
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/master'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Detect Android-relevant paths changed
+        id: paths
+        uses: dorny/paths-filter@v4
+        with:
+          filters: |
+            relevant:
+              - 'android/**'
+              - 'src/**'
+              - 'common/**'
+              - '__fixtures__/**'
+              - '.maestro/**'
+              - 'example/android/**'
+              - 'example/src/**'
+              - 'example/package.json'
+              - 'example/babel.config.js'
+              - 'example/metro.config.js'
+              - 'example/tsconfig.json'
+
+      - name: Setup
+        if: steps.paths.outputs.relevant == 'true'
+        uses: ./.github/actions/setup
+
+      - name: Install JDK
+        if: steps.paths.outputs.relevant == 'true'
+        uses: actions/setup-java@v5
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Enable KVM
+        if: steps.paths.outputs.relevant == 'true'
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Install Maestro
+        if: steps.paths.outputs.relevant == 'true'
+        run: |
+          curl -fsSL "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> $GITHUB_PATH
+
+      - name: Build example debug APK
+        if: steps.paths.outputs.relevant == 'true'
+        working-directory: example/android
+        env:
+          JAVA_OPTS: "-XX:MaxHeapSize=6g"
+        run: ./gradlew :app:assembleDebug --no-daemon
+
+      - name: Run Maestro on emulator
+        if: steps.paths.outputs.relevant == 'true'
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          profile: pixel_6
+          # `cd .maestro-output` matches the local `yarn maestro:android`
+          # script: it makes the cwd the screenshot/JUnit output sink so
+          # `takeScreenshot:` PNGs and `--output maestro-junit.xml` all
+          # land in one tidy directory that the next step uploads as a
+          # single artifact.
+          script: |
+            adb install -r example/android/app/build/outputs/apk/debug/app-debug.apk
+            mkdir -p .maestro-output
+            cd .maestro-output
+            maestro test ../.maestro --include-tags=android --format=junit --output maestro-junit.xml
+
+      - name: Upload Maestro artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: maestro-android-output
+          path: |
+            .maestro-output/
+            ~/.maestro/tests/**
+          retention-days: 14
+          if-no-files-found: ignore
+
+  # Layer 6b — Maestro on iOS Simulator.
+  #
+  # Path filter excludes `android/**` and `example/android/**` —
+  # symmetric to `maestro-android`'s exclusion of iOS paths.
+  maestro-ios:
+    runs-on: macos-latest
+    timeout-minutes: 75
+    if: |
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/master'
+
+    env:
+      XCODE_VERSION: 26
+      # Mirrors `test-ios` — keep these two in sync when bumping device.
+      IOS_SIMULATOR: 'iPhone 17'
+      RCT_USE_RN_DEP: 1
+      RCT_USE_PREBUILT_RNCORE: 1
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Detect iOS-relevant paths changed
+        id: paths
+        uses: dorny/paths-filter@v4
+        with:
+          filters: |
+            relevant:
+              - 'ios/**'
+              - 'src/**'
+              - 'common/**'
+              - '__fixtures__/**'
+              - '.maestro/**'
+              - 'example/ios/**'
+              - 'example/src/**'
+              - 'example/package.json'
+              - 'example/babel.config.js'
+              - 'example/metro.config.js'
+              - 'example/tsconfig.json'
+
+      - name: Setup
+        if: steps.paths.outputs.relevant == 'true'
+        uses: ./.github/actions/setup
+
+      - name: Use appropriate Xcode version
+        if: steps.paths.outputs.relevant == 'true'
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: ${{ env.XCODE_VERSION }}
+
+      - name: Install Maestro
+        if: steps.paths.outputs.relevant == 'true'
+        run: |
+          curl -fsSL "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> $GITHUB_PATH
+
+      - name: Install CocoaPods
+        if: steps.paths.outputs.relevant == 'true'
+        working-directory: example
+        run: |
+          bundle install
+          bundle exec pod repo update --verbose
+          bundle exec pod install --project-directory=ios
+
+      - name: Boot iOS Simulator
+        if: steps.paths.outputs.relevant == 'true'
+        run: |
+          xcrun simctl boot "${IOS_SIMULATOR}" || true
+          xcrun simctl bootstatus "${IOS_SIMULATOR}" -b
+
+      - name: Build & install example app on Simulator
+        if: steps.paths.outputs.relevant == 'true'
+        working-directory: example/ios
+        run: |
+          xcodebuild build \
+            -workspace AdaptiveTextExample.xcworkspace \
+            -scheme AdaptiveTextExample \
+            -configuration Debug \
+            -destination "platform=iOS Simulator,name=${IOS_SIMULATOR},OS=latest" \
+            -derivedDataPath ./build \
+            CODE_SIGNING_ALLOWED=NO
+          xcrun simctl install booted \
+            ./build/Build/Products/Debug-iphonesimulator/AdaptiveTextExample.app
+
+      - name: Run Maestro flows
+        if: steps.paths.outputs.relevant == 'true'
+        # Mirror the `yarn maestro:ios` cwd flip so screenshots + JUnit
+        # XML land in the .maestro-output/ directory uploaded below.
+        run: |
+          mkdir -p .maestro-output
+          cd .maestro-output
+          maestro test ../.maestro --include-tags=ios --format=junit --output maestro-junit.xml
+
+      - name: Upload Maestro artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: maestro-ios-output
+          path: |
+            .maestro-output/
+            ~/.maestro/tests/**
+          retention-days: 14
+          if-no-files-found: ignore

@@ -1,0 +1,114 @@
+[
+  {
+    "name": "empty string yields no tokens",
+    "input": "",
+    "splitBy": "word",
+    "expected": []
+  },
+  {
+    "name": "single word",
+    "input": "Hello",
+    "splitBy": "word",
+    "expected": [
+      { "id": "w0:Hello", "text": "Hello", "attachToPrevious": false }
+    ]
+  },
+  {
+    "name": "two plain words",
+    "input": "Hello world",
+    "splitBy": "word",
+    "expected": [
+      { "id": "w0:Hello", "text": "Hello", "attachToPrevious": false },
+      { "id": "w1:world", "text": "world", "attachToPrevious": false }
+    ]
+  },
+  {
+    "name": "trailing punctuation stays attached to the prior word as part of the same token",
+    "input": "Hello, world!",
+    "splitBy": "word",
+    "expected": [
+      { "id": "w0:Hello,", "text": "Hello,", "attachToPrevious": false },
+      { "id": "w1:world!", "text": "world!", "attachToPrevious": false }
+    ]
+  },
+  {
+    "name": "whitespace-separated punctuation becomes its own token attached to the previous one",
+    "input": "Hello , world",
+    "splitBy": "word",
+    "expected": [
+      { "id": "w0:Hello", "text": "Hello", "attachToPrevious": false },
+      { "id": "w1:,", "text": ",", "attachToPrevious": true },
+      { "id": "w2:world", "text": "world", "attachToPrevious": false }
+    ]
+  },
+  {
+    "name": "multiple internal spaces collapse",
+    "input": "  Hello    adaptive   world  ",
+    "splitBy": "word",
+    "expected": [
+      { "id": "w0:Hello", "text": "Hello", "attachToPrevious": false },
+      { "id": "w1:adaptive", "text": "adaptive", "attachToPrevious": false },
+      { "id": "w2:world", "text": "world", "attachToPrevious": false }
+    ]
+  },
+  {
+    "name": "newlines act like whitespace separators",
+    "input": "Line one\nline two",
+    "splitBy": "word",
+    "expected": [
+      { "id": "w0:Line", "text": "Line", "attachToPrevious": false },
+      { "id": "w1:one", "text": "one", "attachToPrevious": false },
+      { "id": "w2:line", "text": "line", "attachToPrevious": false },
+      { "id": "w3:two", "text": "two", "attachToPrevious": false }
+    ]
+  },
+  {
+    "name": "tabs act like whitespace separators",
+    "input": "a\tb\tc",
+    "splitBy": "word",
+    "expected": [
+      { "id": "w0:a", "text": "a", "attachToPrevious": false },
+      { "id": "w1:b", "text": "b", "attachToPrevious": false },
+      { "id": "w2:c", "text": "c", "attachToPrevious": false }
+    ]
+  },
+  {
+    "name": "leading punctuation token cannot attach because there is no previous",
+    "input": ", oops",
+    "splitBy": "word",
+    "expected": [
+      { "id": "w0:,", "text": ",", "attachToPrevious": false },
+      { "id": "w1:oops", "text": "oops", "attachToPrevious": false }
+    ]
+  },
+  {
+    "name": "ASCII grapheme split — each character is its own token, blanks are skipped while keeping the running id counter",
+    "input": "A B",
+    "splitBy": "grapheme",
+    "expected": [
+      { "id": "g0:A", "text": "A", "attachToPrevious": false },
+      { "id": "g2:B", "text": "B", "attachToPrevious": false }
+    ]
+  },
+  {
+    "name": "CJK grapheme split — every codepoint is one cluster",
+    "input": "你好世界",
+    "splitBy": "grapheme",
+    "expected": [
+      { "id": "g0:你", "text": "你", "attachToPrevious": false },
+      { "id": "g1:好", "text": "好", "attachToPrevious": false },
+      { "id": "g2:世", "text": "世", "attachToPrevious": false },
+      { "id": "g3:界", "text": "界", "attachToPrevious": false }
+    ]
+  },
+  {
+    "name": "grapheme split preserves index across skipped whitespace",
+    "input": "Hi  你",
+    "splitBy": "grapheme",
+    "expected": [
+      { "id": "g0:H", "text": "H", "attachToPrevious": false },
+      { "id": "g1:i", "text": "i", "attachToPrevious": false },
+      { "id": "g4:你", "text": "你", "attachToPrevious": false }
+    ]
+  }
+]

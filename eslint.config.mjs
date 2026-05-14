@@ -24,6 +24,18 @@ export default defineConfig([
     },
   },
   {
-    ignores: ['node_modules/', 'lib/'],
+    // Gradle's `testDebugUnitTest`/`testReleaseUnitTest` tasks emit
+    // an HTML report containing a generated `report.js` whose
+    // formatting we do not control — and Jest's `--coverage` writes
+    // an `lcov-report/` HTML tree with the same property. Both must
+    // be excluded so `yarn lint` doesn't fail on output artifacts.
+    ignores: [
+      'node_modules/',
+      'lib/',
+      'android/build/',
+      'example/android/build/',
+      'coverage/',
+      '.maestro/',
+    ],
   },
 ]);

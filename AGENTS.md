@@ -222,6 +222,21 @@ For the library itself there's no build step — TypeScript is transpiled by
 `react-native-builder-bob` on publish, native code is compiled by Fabric
 codegen / Gradle / CocoaPods when consumed by an app.
 
+### Tests
+
+```sh
+yarn test                                                                # Jest (JS façade)
+cd example/android && ./gradlew :react-native-textflow:testDebugUnitTest # JUnit
+cd example/android && ./gradlew :react-native-textflow:connectedDebugAndroidTest  # needs emulator
+yarn maestro:android                                                     # E2E Android
+yarn maestro:ios                                                         # E2E iOS
+```
+
+XCTest runs from Xcode (open `example/ios/AdaptiveTextExample.xcworkspace`,
+scheme `AdaptiveTextExampleTests`, ⌘U) or via `xcodebuild test` — see
+[`TEST_GUIDE.md`](TEST_GUIDE.md) for the full per-layer instructions
+including prerequisites, debugging tips, and the CI matrix.
+
 ### Codegen
 
 `codegen.specVersion = 3` in `package.json`. The spec is in
@@ -276,25 +291,63 @@ shared wrap algorithm).
 
 ---
 
-## 9. Testing checklist for a measurer/renderer change
+## 9. Testing
 
-Before merging, walk through every example screen and verify:
+The repo ships a six-layer automated test suite. Each layer guards a
+different concurrency boundary in §4 — pick the cheapest one that can
+catch the regression you care about. Full local-run instructions live
+in [`TEST_GUIDE.md`](TEST_GUIDE.md); this section is the agent-facing
+**which-layer-do-I-need** index.
+
+### 9.1 Test matrix
+
+| Layer | Path | Guards which invariant |
+| --- | --- | --- |
+| 1. JS unit (Jest) | `src/__tests__/` | JS façade — prop coercion, `accessibilityLabel` derivation (§4.3 smoke) |
+| 2. Tokenizer parity (shared fixture) | `__fixtures__/tokenizer.json` consumed by Jest + JUnit + XCTest | §4.4 — token list & `attachMask` byte-identical across platforms |
+| 3. Android JVM unit (JUnit) | `android/src/test/` | §4.1 cache-key correctness — distinct font configs must produce distinct keys |
+| 4. Android Compose UI (instrumented) | `android/src/androidTest/AdaptiveTextViewHeightTest.kt` | **§4.2 — the smoking gun.** ComposeView height must track AdaptiveTextView's height across every prop snapshot. |
+| 5. iOS XCTest | `example/ios/AdaptiveTextExampleTests/` | §4.4 — Swift tokenizer parity with the shared fixture; **§4.1 — direct coverage of the iOS Yoga measurer** (wrap algorithm, line-height floor §4.1.4, constraints clamping §4.1.5, per-token width-cache idempotency) |
+| 6. Maestro E2E (`.maestro/`) | both platforms | User-observable regressions across §4.1 / §4.2 / §4.3 — drag-resize, preset toggle, fontSize morph, theme cycle |
+
+### 9.2 What to run after which kind of change
+
+| You changed… | Mandatory layers | Strongly recommended |
+| --- | --- | --- |
+| `src/` (JS façade only) | 1 | — |
+| `__fixtures__/` or any tokenizer | 1 + 3 + 5 | 6 |
+| Either measurer (`.kt` / `.mm`) | 3 (Android) or 5 (iOS) | 4 + 6 (§4.1 wrap parity must hold end-to-end) |
+| `AdaptiveTextView.kt` or `AdaptiveFlowLayout.kt` | 3 + 4 | 6a (Maestro Android) |
+| Anything iOS-side renderer | 5 | 6b (Maestro iOS) |
+| `example/src/screens/` | — | 6 (the flows talk to the real UI) |
+
+Layers 1–3 + 5 are **cheap** (`yarn test`, `./gradlew testDebug…`,
+XCTest in Xcode) and run on every PR. Layers 4 + 6 are **heavy**
+(emulator/simulator-bound) and only run on push to `master` against
+relevant paths — but you should run them locally before merging any
+change in their "mandatory" rows above.
+
+### 9.3 Manual visual checklist (still valuable)
+
+Maestro captures functional regressions but not subtle visual ones
+(animation curves, sub-pixel jitter, palette interpolation gradients).
+For any measurer/renderer change, also walk through the example app:
 
 1. Initial layout matches the design spec on both platforms.
-2. **Screen 1 (Resizable):** Drag the handle slowly across its full range
-   — tokens should never visibly clip or jump; the bottom line should
-   always be fully visible.
+2. **Screen 1 (Resizable):** Drag the handle slowly across its full
+   range — tokens should never visibly clip or jump; the bottom line
+   should always be fully visible.
 3. **Screen 4 (ScrollView)** and **5 (FlatList):** Toggle the font-size
-   preset compact ↔ comfortable several times. The last line in each row
-   must remain fully visible.
+   preset compact ↔ comfortable several times. The last line in each
+   row must remain fully visible.
 4. **Screen 7 (StyleMorph):** Drag `fontSize` from 12 → 36 and back —
    text should never visibly overflow the frame on iOS or Android.
 5. **Screen 8 (RTL):** All five `textAlign` pills should animate the
    tokens smoothly to their new line position on both platforms.
 6. **Screen 11 (Theme):** Light → Dark → Light → Dark → Light. Card
    chrome animates each time; AdaptiveText snaps; nothing freezes.
-7. Xcode log for screen 4 in `<ScrollView>` should not show "returned an
-   invalid measurement" warnings.
+7. Xcode log for screen 4 in `<ScrollView>` should **not** show
+   "returned an invalid measurement" warnings.
 
 ---
 
@@ -304,6 +357,9 @@ Before merging, walk through every example screen and verify:
   *implementation* details (cache keys, threading, etc.).
 - This file is the source of truth for the *design* (invariants and
   rationale).
+- [`TEST_GUIDE.md`](TEST_GUIDE.md) is the source of truth for *how to
+  run any layer of the test suite locally*, including the iOS/Android
+  prerequisites and the Maestro debugging recipe.
 - The `README.md` is for *users*.
 
 When in doubt, read the long-form comment block near the top of:

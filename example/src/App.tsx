@@ -31,7 +31,7 @@ export default function App() {
               key={demo.name}
               name={demo.name as keyof RootStackParamList}
               component={demo.component}
-              options={{ title: demo.title }}
+              options={{ title: demo.title, ...demo.options }}
             />
           ))}
         </Stack.Navigator>

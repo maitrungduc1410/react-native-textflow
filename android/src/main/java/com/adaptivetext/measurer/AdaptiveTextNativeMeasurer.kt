@@ -619,7 +619,13 @@ object AdaptiveTextNativeMeasurer {
     return with(composeDensity) { px.toSp() }
   }
 
-  private fun fontCacheKey(
+  // Visibility relaxed from `private` to `internal` so the JVM unit
+  // test in `android/src/test/.../AdaptiveTextNativeMeasurerCacheKeyTest.kt`
+  // can directly call this builder and verify that every prop affecting
+  // glyph advance contributes a distinct key (AGENTS.md §8.A: any new
+  // width-affecting prop must appear in this key, otherwise stale
+  // cached widths produce wrap mis-prediction).
+  internal fun fontCacheKey(
     fontFamily: String,
     fontSizePx: Float,
     fontWeight: String,

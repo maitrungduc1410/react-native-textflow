@@ -67,8 +67,25 @@ export default function ResizableContainer() {
         <View
           {...responder.panHandlers}
           style={[styles.handle, { left: width - 16 }]}
+          // `accessible` is required on iOS for this plain <View> to
+          // become an `isAccessibilityElement` and therefore be visible
+          // to XCTest / Maestro. RN auto-sets this flag for touchables
+          // but NOT for plain Views with just `accessibilityLabel` /
+          // `accessibilityRole` — Android's a11y tree exposes them
+          // anyway, which made this look "fine" cross-platform until
+          // the iOS Maestro flow tried to match the handle by `id:`.
+          //
+          // Note we deliberately do NOT set `accessibilityRole="adjustable"`
+          // here even though semantically it fits a drag handle. RN maps
+          // that role to `UIAccessibilityTraitAdjustable`, which (a) is
+          // non-functional without a paired `accessibilityValue` +
+          // `onAccessibilityAction` increment/decrement handler and (b)
+          // re-categorises the element in XCTest's snapshot in a way
+          // that broke Maestro's `id:` query. Adding the role properly
+          // — with value + actions — would be a future improvement.
+          accessible
+          testID="ResizeHandle"
           accessibilityLabel="Resize handle"
-          accessibilityRole="adjustable"
         >
           <View style={styles.handleGrip} />
         </View>

@@ -15,6 +15,14 @@ type Props = {
   step?: number;
   unit?: string;
   onChange: (value: number) => void;
+  // E2E hook (Maestro / XCTest / UIAutomator). Maps to
+  // iOS `accessibilityIdentifier` and Android `resource-id`. We expose
+  // it because matching by *text* is fragile here: the header lays the
+  // label and value in a flex row, and iOS auto-combines those sibling
+  // <Text>s into a single accessibility element ("Font size 20px"),
+  // which Maestro's full-match `text:` regex can't satisfy with just
+  // "Font size". testID side-steps the entire issue.
+  testID?: string;
 };
 
 /**
@@ -35,6 +43,7 @@ export function Slider({
   step = 1,
   unit,
   onChange,
+  testID,
 }: Props) {
   const [width, setWidth] = useState(0);
 
@@ -98,7 +107,26 @@ export function Slider({
   const ratio = width > 0 ? (value - min) / (max - min) : 0;
 
   return (
-    <View style={styles.row}>
+    // `testID` + `accessible` together expose the wrapper to iOS's
+    // XCTest accessibility tree (which Maestro queries). testID alone
+    // sets `accessibilityIdentifier` but does NOT set
+    // `isAccessibilityElement`, so without `accessible` the wrapper is
+    // invisible to XCTest on iOS even though Android exposes it.
+    //
+    // testID lives on the outer wrapper (not the track) so its bounds
+    // span header + track, giving Maestro something to assertVisible
+    // against and a stable swipe-from target. The wrapper's vertical
+    // center falls inside the track, so synthesised swipes still land
+    // on the gesture-handling region.
+    //
+    // `accessible` is gated on `testID` being set: if no caller needs
+    // a Maestro hook, we keep the original behavior of letting the
+    // child Texts surface individually for VoiceOver. With testID set,
+    // the trade-off is that VoiceOver reads the slider as one combined
+    // element — acceptable for an example app and matches what a
+    // properly-instrumented slider with `accessibilityRole="adjustable"`
+    // would do anyway.
+    <View style={styles.row} testID={testID} accessible={testID !== undefined}>
       <View style={styles.header}>
         <Text style={styles.label}>{label}</Text>
         <Text style={styles.value}>

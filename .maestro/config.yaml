@@ -1,0 +1,13 @@
+# Workspace-level Maestro config. Discovered automatically by
+# `maestro test .maestro` from the workspace root.
+#
+# `executionOrder` ensures the home → demo flows always run after the
+# launch smoke test in CI, so we get a meaningful screenshot baseline
+# even if a follow-up flow regresses.
+executionOrder:
+  flowsOrder:
+    - 00-launch
+    - 01-resizable
+    - 04-scrollview-preset-toggle
+    - 07-stylemorph-fontsize
+    - 11-theme-toggle

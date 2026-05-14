@@ -177,6 +177,29 @@ Screens:
 | 10 | Showcase card | Avatar + adaptive bio that grows on tap (the README screenshot). |
 | 11 | Dark / Light theme | Card chrome interpolates, AdaptiveText snaps to new color (color is a non-layout prop). |
 
+## Testing
+
+The library ships a **six-layer test suite** that guards everything from
+the JS façade down to the user-observable Compose / SwiftUI motion. The
+quick commands:
+
+```sh
+yarn lint && yarn typecheck                                              # static checks
+yarn test                                                                # Jest (JS unit)
+cd example/android && ./gradlew :react-native-textflow:testDebugUnitTest # Android JVM unit
+yarn maestro:android                                                     # E2E (Android)
+yarn maestro:ios                                                         # E2E (iOS)
+```
+
+iOS XCTest runs via Xcode (open `example/ios/AdaptiveTextExample.xcworkspace`
+and pick the `AdaptiveTextExampleTests` scheme) or via `xcodebuild`; the
+Android Compose UI test runs via `connectedDebugAndroidTest` against a
+booted emulator. CI runs every layer on `master` — cheap layers on every
+PR, simulator/emulator-bound layers gated by `paths-filter`.
+
+Full instructions including prerequisites, what each layer covers, and a
+Maestro debugging recipe live in [TEST_GUIDE.md](TEST_GUIDE.md).
+
 ## Architecture in one diagram
 
 ```

@@ -19,6 +19,18 @@ export default function HomeScreen() {
         {demos.map((demo, idx) => (
           <Pressable
             key={demo.name}
+            // testID gives Maestro / E2E tooling a stable, locale-stable
+            // hook into each row. `accessibilityLabel` is intentionally
+            // *not* set: iOS auto-combines child <Text> content into a
+            // single VoiceOver utterance ("01 Resizable container —
+            // Drag the handle…") which is the friendlier reader UX. But
+            // that combined label is also what Maestro's full-match
+            // `text:` regex sees — `tapOn: "Resizable container"` would
+            // not match because the element's text is the longer
+            // sentence. testID maps to iOS `accessibilityIdentifier`,
+            // which is separate from the user-facing label, so we get a
+            // clean E2E selector without regressing accessibility.
+            testID={demo.name}
             onPress={() =>
               navigation.navigate(
                 demo.name as keyof RootStackParamList as never

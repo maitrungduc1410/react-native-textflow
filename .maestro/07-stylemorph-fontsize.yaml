@@ -1,0 +1,42 @@
+# AGENTS.md §9.4: "Drag fontSize from 12 → 36 and back — text should
+# never visibly overflow the frame on iOS or Android."
+#
+# Driven via the Font size <Slider>'s testID (set in
+# example/src/screens/07-StyleMorph.tsx). We deliberately don't match
+# the visible "Font size" label by text: the Slider header lays the
+# label and value as sibling Texts in a flex row, and iOS auto-combines
+# those into a single accessibility element ("Font size 20px") which
+# Maestro's full-match `text:` regex can't satisfy with just the label
+# half. The id: matcher reads the testID, which iOS and Android both
+# expose as a separate, locale-independent identifier.
+#
+# This is intentionally coarse: the goal is to catch regressions where
+# the entire frame either overflows or freezes — pixel-perfect parity
+# is the Compose UI test's job (AGENTS.md §4.1).
+appId: adaptivetext.example
+tags:
+  - android
+  - ios
+---
+- launchApp:
+    clearState: true
+# Home row by testID — see 00-launch.yaml for rationale.
+- tapOn:
+    id: "StyleMorph"
+- assertVisible:
+    id: "FontSizeSlider"
+- takeScreenshot: 07-stylemorph-default
+
+# Drag font size right — should grow.
+- swipe:
+    from:
+      id: "FontSizeSlider"
+    direction: RIGHT
+- takeScreenshot: 07-stylemorph-large
+
+# Drag font size left — should shrink back.
+- swipe:
+    from:
+      id: "FontSizeSlider"
+    direction: LEFT
+- takeScreenshot: 07-stylemorph-small

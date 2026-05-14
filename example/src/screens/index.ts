@@ -1,4 +1,5 @@
 import type { ComponentType } from 'react';
+import type { NativeStackNavigationOptions } from '@react-navigation/native-stack';
 import ResizableContainer from './01-ResizableContainer';
 import AnimatedWidth from './02-AnimatedWidth';
 import ModalScreen from './03-Modal';
@@ -15,12 +16,17 @@ import ThemeScreen from './11-Theme';
  * One row in the home screen. The `name` is also the route name used by
  * React Navigation, so be sure not to rename without updating
  * `RootStackParamList` below.
+ *
+ * `options` is an optional per-screen override merged with the
+ * navigator's defaults in App.tsx. Use it sparingly — most screens
+ * should rely on the global `screenOptions`.
  */
 export type DemoRoute = {
   name: string;
   title: string;
   subtitle: string;
   component: ComponentType;
+  options?: NativeStackNavigationOptions;
 };
 
 export const demos: DemoRoute[] = [
@@ -30,6 +36,15 @@ export const demos: DemoRoute[] = [
     subtitle:
       'Drag the handle. Words spring between lines as the width changes.',
     component: ResizableContainer,
+    // Disable iOS's interactive-pop gesture on this screen. The screen's
+    // primary interaction is a horizontal drag on the resize handle —
+    // Maestro's synthesised RIGHT-direction swipe (and, in some cases,
+    // a real user dragging the handle far enough) competes with
+    // UINavigationController's `interactivePopGestureRecognizer` and
+    // pops the screen back to Home mid-test. Real users still have the
+    // back button + back tap target in the header. No effect on Android,
+    // where there's no built-in horizontal-pop gesture.
+    options: { gestureEnabled: false },
   },
   {
     name: 'AnimatedWidth',

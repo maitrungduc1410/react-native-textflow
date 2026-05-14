@@ -1,0 +1,36 @@
+# AGENTS.md §9.3: "Toggle the font-size preset compact ↔ comfortable
+# several times. The last line in each row must remain fully visible."
+#
+# This flow is the primary E2E guard for the §4.2 ComposeView height
+# bug — toggling the preset is the same code path that originally
+# triggered the bottom-line clipping on Android. The Compose UI
+# instrumented test (AdaptiveTextViewHeightTest) pins the View-level
+# invariant; this flow pins the user-observable outcome with a
+# screenshot diff.
+appId: adaptivetext.example
+tags:
+  - android
+  - ios
+---
+- launchApp:
+    clearState: true
+# Home row by testID — see 00-launch.yaml for rationale.
+- tapOn:
+    id: "ScrollView"
+- assertVisible: "comfortable"
+- takeScreenshot: 04-scrollview-comfortable-1
+
+- tapOn: "compact"
+- takeScreenshot: 04-scrollview-compact-1
+
+- tapOn: "comfortable"
+- takeScreenshot: 04-scrollview-comfortable-2
+
+- tapOn: "compact"
+- takeScreenshot: 04-scrollview-compact-2
+
+# Final back to comfortable — this is the iteration that previously
+# regressed (§4.2). The bottom of the comfortable text must remain
+# visible after the third toggle.
+- tapOn: "comfortable"
+- takeScreenshot: 04-scrollview-comfortable-3

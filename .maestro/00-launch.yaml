@@ -1,0 +1,23 @@
+# Smoke test: launch the example app and confirm the home screen
+# rendered. If this flow goes red, it means the example app didn't
+# bootstrap at all and the rest of the suite would have produced
+# meaningless red squiggles. Keeping it as the first flow surfaces
+# launch-time regressions cheaply.
+appId: adaptivetext.example
+tags:
+  - android
+  - ios
+  - smoke
+---
+- launchApp:
+    clearState: true
+# "Adaptive Text" is a standalone <Text> at the top of HomeScreen, so
+# matching by user-facing text works on both platforms. The first demo
+# row is a multi-Text <Pressable> — on iOS the OS auto-combines the
+# children into a single accessibility label, so we match the row via
+# its `testID` instead (mirrors Maestro's android-friendly behavior on
+# both platforms; no locale dependency).
+- assertVisible: "Adaptive Text"
+- assertVisible:
+    id: "ResizableContainer"
+- takeScreenshot: launch-home

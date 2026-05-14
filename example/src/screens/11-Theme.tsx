@@ -153,6 +153,29 @@ function useInterpolatedPalette(target: Palette): Palette {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [target]);
 
+  // Why `target` is in the deps:
+  //
+  //   `progress` is a stable ref-held Animated.Value, so a deps list of
+  //   `[progress]` alone makes useMemo run exactly once — at mount, when
+  //   both refs are still the initial palette. The seven
+  //   `progress.interpolate({ outputRange })` nodes built in that first
+  //   pass are then frozen with `outputRange: [LIGHT, LIGHT]` (the
+  //   per-render refs are *read* inside the lambda, but the interpolation
+  //   node is constructed eagerly with the values at that moment). On
+  //   every subsequent toggle the useEffect dutifully animates `progress`
+  //   0→1, but the interpolation maps both endpoints to LIGHT → the card
+  //   chrome appears frozen at the initial palette while `<AdaptiveText
+  //   style.color>` (which reads `resolved` directly, not via the
+  //   interpolation) snaps to the new palette. Dark text on a stuck-light
+  //   card → nearly invisible body copy. The Maestro flow on screen 11
+  //   surfaced this.
+  //
+  //   Including `target` makes useMemo re-run on every toggle. The ref
+  //   rotation above runs synchronously during render *before* this
+  //   useMemo, so by the time we read `fromRef.current` / `toRef.current`
+  //   they already hold the correct (previous, current) pair, and the
+  //   freshly-built interpolation nodes have the right outputRange for
+  //   the upcoming 0→1 sweep that the useEffect will start.
   return useMemo(() => {
     const interp = (key: keyof Palette) =>
       progress.interpolate({
@@ -168,7 +191,15 @@ function useInterpolatedPalette(target: Palette): Palette {
       accent: interp('accent'),
       caption: interp('caption'),
     };
-  }, [progress]);
+    // `target` is read indirectly: the ref rotation above runs during
+    // render right before this useMemo, so by the time we read
+    // `fromRef.current` and `toRef.current` they already reflect the
+    // new (previous, current) pair. ESLint can't see that data flow,
+    // so it flags `target` as "unnecessary". It's actually load-
+    // bearing — without it the memo never re-runs and outputRange
+    // stays frozen at the mount-time palette pair.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [progress, target]);
 }
 
 export default function ThemeScreen() {
