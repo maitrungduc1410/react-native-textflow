@@ -15,6 +15,20 @@ tags:
 - launchApp:
     clearState: true
 # Home row by testID — see 00-launch.yaml for rationale.
+#
+# `ScrollView` is row 4/11 on Home. It's visible on most local Android
+# emulators but lands right at (or just past) the fold on the CI
+# `pixel_6` profile after the system bar, RN stack header, and hero
+# block consume vertical space. Maestro's `tapOn` auto-scroll inside
+# RN's <ScrollView> is unreliable (see 11-theme-toggle.yaml for the
+# canonical comment on this), so we drive the scroll explicitly. If
+# the row is already on-screen, scrollUntilVisible returns immediately
+# and adds no measurable cost.
+- scrollUntilVisible:
+    element:
+      id: "ScrollView"
+    direction: DOWN
+    timeout: 20000
 - tapOn:
     id: "ScrollView"
 - assertVisible: "comfortable"

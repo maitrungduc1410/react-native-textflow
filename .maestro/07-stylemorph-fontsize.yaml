@@ -21,6 +21,19 @@ tags:
 - launchApp:
     clearState: true
 # Home row by testID — see 00-launch.yaml for rationale.
+#
+# `StyleMorph` is row 7/11 on Home. It happens to fit on most emulator
+# viewports including CI's `pixel_6`, but it's close enough to the fold
+# that font-size or system-bar deltas can push it off-screen. Maestro's
+# `tapOn` auto-scroll inside RN's <ScrollView> is unreliable (see
+# 11-theme-toggle.yaml), so we drive the scroll explicitly to avoid
+# flake. If the row is already on-screen, scrollUntilVisible returns
+# immediately and adds no measurable cost.
+- scrollUntilVisible:
+    element:
+      id: "StyleMorph"
+    direction: DOWN
+    timeout: 20000
 - tapOn:
     id: "StyleMorph"
 - assertVisible:
